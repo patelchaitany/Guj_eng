@@ -132,6 +132,6 @@ class Decoder_Cross(nn.Module):
         x = self.layer_norm1(x)
         z = self.cross_attn(x,y)
         z = x + z
-        z = self.layer_norm2(x)
-        z = x + self.decoder_mlp(x)
+        z = self.layer_norm2(z)
+        z = z + self.decoder_mlp(z)
         return z
