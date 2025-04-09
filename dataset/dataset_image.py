@@ -165,7 +165,11 @@ class ImageDataset(Dataset):
         return data
 
 if __name__ == "__main__":
-    dataset = ImageDataset("eng_guj_img",tokenizer_path, "out_image")
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    data_dir = os.path.join(os.path.dirname(current_dir),"data")
+    dataset = ImageDataset(os.path.join(data_dir,"eng_guj_img"),tokenizer_path, os.path.join(data_dir,"images"))
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True,collate_fn = collect_fn)
     for data in data_loader:
         print(data['input'])

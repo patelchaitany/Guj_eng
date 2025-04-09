@@ -71,7 +71,7 @@ def prepare_image(image_path,text,path,leng):
     img_cropped.save(save_path)
     return image_name
 
-def prpare_data(csv_file,image_list,image_directory):
+def prpare_data(csv_file,image_list,image_directory,data_dir):
 
     data = pd.read_csv(csv_file, sep="\t")
     process_data=[]
@@ -107,12 +107,15 @@ def prpare_data(csv_file,image_list,image_directory):
         })
     df_process_data = pd.DataFrame(process_data)
     data_set = Dataset.from_pandas(df_process_data)
-    data_set.save_to_disk('eng_guj_img')
+    out_path = os.path.join(data_dir,"eng_guj_img")
+    data_set.save_to_disk(out_path)
 
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    output_image_dir = "out_image"
+
+    data_dir = os.path.join(os.path.dirname(current_dir),"data")
+    output_image_dir = os.path.join(data_dir,"images")
 
     os.makedirs(output_image_dir, exist_ok=True)
 
@@ -129,4 +132,4 @@ if __name__ == "__main__":
     else:
         print(f"Directory '{image_dir}' not found")
 
-    prpare_data("temp.tsv",image_files,output_image_dir)
+    prpare_data("temp.tsv",image_files,output_image_dir,data_dir)
