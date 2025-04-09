@@ -3,3 +3,9 @@ __pycache__/
 ./.ipynb_checkpoints/
 .ropeproject/
 data.txt
+./dataset/eng_guj_img/*
+./dataset/temp.tsv
+./dataset/out_image/*
+guj_Gujr.tsv
+font/*
+image_data/*

@@ -1,0 +1,32 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "scr_lang": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "tgt_lang": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "scr": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "tgt": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "scr_image": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "tgt_image": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}
