@@ -42,7 +42,7 @@ def prepare_image(image_path,text):
     total_height = len(wrapped_text) * line_height + (len(wrapped_text) - 1) * line_spacing
 
     initial_font_size = font_size
-    while total_height > 224 and font_size > 5:  # Minimum font size of 5 for readability
+    while total_height > 224 and font_size > 5:
         font_size -= 1
         font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", font_size)
         line_height = draw.textbbox((0, 0), "Sample", font=font)[3] - draw.textbbox((0, 0), "Sample", font=font)[1]
