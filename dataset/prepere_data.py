@@ -22,9 +22,7 @@ def prepare_data(csv_file,tokenizer_path):
     data = pd.read_csv(csv_file, sep="\t")
     # data = pd.read_csv(csv_file)
     process_data=[]
-
     for i in tqdm(range(len(data))):
-
         row = data.iloc[i]
         src = row['src']
         tgt = row['tgt']
@@ -32,22 +30,16 @@ def prepare_data(csv_file,tokenizer_path):
             src = str(src)
         if tgt is not str:
             tgt = str(tgt)
-
         tokenized_src = tokenizer.encode(src)
         tokenized_tgt = tokenizer.encode(tgt)
-
-
         process_data.append({
             'src_lang': row['src_lang'],
             'tgt_lang': row['tgt_lang'],
             'src': tokenized_src,
             'tgt': tokenized_tgt
         })
-
     df_process_data = pd.DataFrame(process_data)
     data_set = Dataset.from_pandas(df_process_data)
-    # print(data_set[0])
-    # print(data_set[1])
     data_set.save_to_disk('eng_guj')
 if __name__ == "__main__":
     prepare_data("guj_Gujr.tsv",tokenizer_path)
