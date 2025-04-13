@@ -10,6 +10,8 @@ from tqdm import tqdm
 import pandas as pd
 import sys
 import os
+import numpy as np
+import cv2
 
 sys.path.append(os.path.abspath("../"))
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -57,12 +59,31 @@ def prepare_image(image_path,text,path,leng):
 
     print(f"Initial random font size: {initial_font_size}px, Adjusted font size: {font_size}px, Total text height: {total_height}px")
 
-    max_x = 224 - max(draw.textbbox((0, 0), line, font=font)[2] - draw.textbbox((0, 0), line, font=font)[0] for line in wrapped_text)
-    x_start = random.randint(0, max_x) if max_x > 0 else 0
+    max_text_width = max(draw.textbbox((0, 0), line, font=font)[2] for line in wrapped_text)
+    x_start = random.randint(0, 224 - max_text_width) if (224 - max_text_width) > 0 else 0
     y_start = 0
+
+
+    text_area = img_cropped.crop((x_start, y_start, x_start + max_text_width, y_start + total_height))
+    rgb_array = np.array(text_area)
+
+    contrast_color = []
+    for channel in range(3):
+        gray = rgb_array[:, :, channel]
+        otsu_thresh_val, thr_image = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        num_zeros = np.sum(thr_image == 0)
+        num_ones = np.sum(thr_image == 255)
+        thr_cnt = num_ones / (num_zeros + num_ones)
+
+        channel_value = 0 if thr_cnt >0.5 else 255
+        contrast_color.append(channel_value)
+
+    text_color = tuple(contrast_color)
+
+
     y = y_start
     for line in wrapped_text:
-        draw.text((x_start, y), line, font=font, fill='black')
+        draw.text((x_start, y), line, font=font, fill=text_color)
         y += line_height + line_spacing
 
     print(f"Adjusted font size: {font_size}px, Total text height: {total_height}px")
