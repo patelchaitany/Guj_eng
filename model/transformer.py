@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 import math as maths
 from model.config import Config
-
+from model.visionenc import VisionEncoder
 
 class Transformer(nn.Module):
 
@@ -20,6 +20,10 @@ class Transformer(nn.Module):
         super(Transformer,self).__init__()
 
         self.config = config
+
+        # VisionEncoder
+        self.visenc = VisionEncoder(config)
+
 
         # decoder
 
@@ -57,22 +61,26 @@ class Transformer(nn.Module):
         pos_embd = pos_embd.unsqueeze(0) # [1,T,embeddings]
         self.register_buffer('pos_embd',pos_embd)
 
-    def forward(self,x,y):
+    def forward(self,x,y,is_image = False):
         # X is targate sequence and y is source sequence
         Bx,Tx = x.size()
-        By,Ty = y.size()
-        # encoder
-        y = self.wte(y) # [B,T] -> [B,T,comman_embeddings]
+        if not is_image:
+            By,Ty = y.size()
+            # encoder
+            y = self.wte(y) # [B,T] -> [B,T,comman_embeddings]
 
-        y = y + self.pos_embd[:,:Ty].requires_grad_(False) # [B,T,comman_embeddings]
-        y = self.encoder.ln_f0(y) # [B,T,comman_embeddings]
-        y = self.encoder.proj_cm(y) # [B,T,comman_embeddings] -> [B,T,encoder_embeddings]
-        for block in self.encoder.h:
-            y = block(y) # [B,T,encoder_embeddings]
+            y = y + self.pos_embd[:,:Ty].requires_grad_(False) # [B,T,comman_embeddings]
+            y = self.encoder.ln_f0(y) # [B,T,comman_embeddings]
+            y = self.encoder.proj_cm(y) # [B,T,comman_embeddings] -> [B,T,encoder_embeddings]
+            for block in self.encoder.h:
+                y = block(y) # [B,T,encoder_embeddings]
 
-        y = self.encoder.ln_f(y) # [B,T,embeddings]
-        y = self.proj_c(y) # [B,T,encoder_embeddings] -> [B,T,decoder_embeddings]
+            y = self.encoder.ln_f(y) # [B,T,embeddings]
+            y = self.proj_c(y) # [B,T,encoder_embeddings] -> [B,T,decoder_embeddings]
 
+        if is_image:
+            By,Cy,Hy,Wx = y.size()
+            y = self.visenc(y) # [B,T,Image_encoding]
         # decoder
 
         x = self.wte(x) # [B,T] -> [B,T,comman_embeddings]
@@ -93,6 +101,7 @@ class Transformer(nn.Module):
         return x
 
 if __name__ == "__main__":
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config = Config(
         d_model = 64,
         nhead = 4,
@@ -106,14 +115,19 @@ if __name__ == "__main__":
         num_embeddings_encoder = 64,
         comman_embedding_dim = 20,
     )
-    model = Transformer(config).to('cuda')
-    x = torch.randint(0,100,(4,32)).to('cuda')
-    y = torch.randint(0,100,(4,32)).to('cuda')
-    out = model(x,y)
+    # for the testing perpouse of text
+
+    model = Transformer(config).to(device)
+    x = torch.randint(0,100,(4,32)).to(device)
+    y = torch.randint(0,100,(4,32)).to(device)
+    img = torch.rand((4,3,256,256)).to(device)
+    out = model(x,img,is_image = True)
+
+
 
     # Calculate loss
     criterion = nn.CrossEntropyLoss()
-    labels = torch.randint(0, 100, (4, 32)).to('cuda')  # Create random labels for demonstration
+    labels = torch.randint(0, 100, (4, 32)).to(device)  # Create random labels for demonstration
     loss = criterion(out.view(-1, config.vocab_size), labels.view(-1))
 
     # Perform backward pass
@@ -122,6 +136,13 @@ if __name__ == "__main__":
     # Print loss value
     print(f"Loss: {loss.item()}")
 
+    # for text only
+
+    out = model(x,y)
+    loss = criterion(out.view(-1,config.vocab_size),labels.view(-1))
+    loss.backward()
+
+    print(f"Loss text : {loss.item()}")
     # Optionally, we could update weights
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # optimizer.step()

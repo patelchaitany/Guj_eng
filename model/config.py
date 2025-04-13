@@ -12,3 +12,4 @@ class Config:
     num_embeddings_decoder:int = 768 #number of embeddings
     num_embeddings_encoder:int = 768 #number of embeddings
     comman_embedding_dim:int = 512 #common embedding dimension
+    control_points:int = 20

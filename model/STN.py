@@ -40,9 +40,8 @@ import torch.nn.functional as F
 
 class STN(nn.Module):
 
-    def __init__(self,num_control_points,I_size,I_r_size,I_num_channels = 1):
+    def __init__(self,num_control_points,I_r_size,I_num_channels = 1):
         super(STN,self).__init__()
-        self.I_size = I_size
         self.I_r_size = I_r_size
         self.I_num_channels = I_num_channels
         self.num_control_points = num_control_points
@@ -192,7 +191,7 @@ if __name__ == '__main__':
     I_size = (28,28)
     I_r_size = (60,60)
     I_num_channels = 3
-    stn = STN(num_control_points,I_size,I_r_size,I_num_channels)
+    stn = STN(num_control_points,I_r_size,I_num_channels)
     x = torch.randn(10,3,28,28)
     y = stn(x)
     print(y.shape)
