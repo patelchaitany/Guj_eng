@@ -39,7 +39,7 @@ def prepare_image(image_path,text,path,leng):
     if leng == "en":
         font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", font_size)
     else :
-        font = ImageFont.truetype("/home/phinex/prog/ml_impl/font/NotoSansGujarati-Black.ttf", font_size)
+        font = ImageFont.truetype("/font/NotoSansGujarati-Black.ttf", font_size)
     wrapper = textwrap.TextWrapper(width=30)
     wrapped_text = wrapper.wrap(text)
 
@@ -53,7 +53,7 @@ def prepare_image(image_path,text,path,leng):
         if leng == "en":
             font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", font_size)
         else :
-            font = ImageFont.truetype("/home/phinex/prog/ml_impl/font/NotoSansGujarati-Black.ttf", font_size)
+            font = ImageFont.truetype("/font/NotoSansGujarati-Black.ttf", font_size)
         line_height = draw.textbbox((0, 0), "Sample", font=font)[3] - draw.textbbox((0, 0), "Sample", font=font)[1]
         total_height = len(wrapped_text) * line_height + (len(wrapped_text) - 1) * line_spacing
 
