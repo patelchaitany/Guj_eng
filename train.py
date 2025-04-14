@@ -106,8 +106,8 @@ def validate_with_text(model, source_texts, tokenizer, device, max_len=50):
 
 def get_lr(it):
     if it<=warmup_steps:
-        scale = it / warmup_steps
-        return (min_lr + scale*(max_lr -min_lr))/max_lr
+        scale = (it+1) / warmup_steps
+        return max_lr * scale
 
     if it>max_step:
         return min_lr
@@ -115,6 +115,7 @@ def get_lr(it):
     deacy_ration = (it-warmup_steps)/(max_step-warmup_steps)
     assert 0<=deacy_ration<=1
     return min_lr + 0.5*(max_lr-min_lr)*(1+torch.cos(torch.tensor(deacy_ration)*math.pi))
+
 
 
 special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
@@ -231,7 +232,7 @@ for i in range(0,max_step):
            break
 
         start_time = time.time()
-        image = item['image'].to(device)
+        image = item['images'].to(device)
         output = item['output'].to(device)
 
         with torch.autocast(device_type="cuda",dtype=torch.float32):
