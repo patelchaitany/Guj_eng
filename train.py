@@ -5,7 +5,6 @@ from datasets import load_from_disk
 from torch.optim.optimizer import Optimizer
 from tqdm import tqdm
 
-# [1] 26454
 
 sys.path.append(os.path.abspath("../"))
 current_dir = os.path.dirname(os.path.abspath(__file__))  # Path to model/train.py
@@ -27,9 +26,9 @@ from torch.utils.data import DataLoader
 import wandb
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-grad_accum = 4096//256
-batch_size = 256
-batch_size_val = 256
+grad_accum = 4096//32
+batch_size = 32
+batch_size_val = 16
 max_iter = 5
 warmup_steps = 10000
 max_lr = 6e-4
@@ -107,7 +106,8 @@ def validate_with_text(model, source_texts, tokenizer, device, max_len=50):
 
 def get_lr(it):
     if it<=warmup_steps:
-        return max_lr*(it+1)/warmup_steps
+        scale = it / warmup_steps
+        return (min_lr + scale*(max_lr -min_lr))/max_lr
 
     if it>max_step:
         return min_lr
@@ -118,7 +118,7 @@ def get_lr(it):
 
 
 special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
-tokenizer_path = "datset/tokenizer.model"
+tokenizer_path = "data/tokenizer.model"
 tokenizer = Tokenizer(special_token)
 tokenizer.load(tokenizer_path)
 
@@ -205,7 +205,7 @@ for i in range(0,max_step):
         x = x.to(device)
         y = y.to(device)
 
-        with torch.autocast(device_type="cuda",dtype=torch.bfloat16):
+        with torch.autocast(device_type="cuda",dtype=torch.float32):
             output = model(y,x)
             output = output[:,:-1,:].contiguous()
             loss = criterion(output.view(-1, output.size(-1)), y[:,1:].contiguous().view(-1))
@@ -234,7 +234,7 @@ for i in range(0,max_step):
         image = item['image'].to(device)
         output = item['output'].to(device)
 
-        with torch.autocast(device_type="cuda",dtype=torch.bfloat16):
+        with torch.autocast(device_type="cuda",dtype=torch.float32):
             pred = model(output,image,is_image = True)
             pred = pred[:,:-1,:].contiguous()
             loss = criterion(pred.view(-1,pred.size(-1)),output[:,1:].contiguous().view(-1))

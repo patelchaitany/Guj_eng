@@ -12,7 +12,7 @@ from torch.nn import functional as F
 import math as maths
 from model.config import Config
 from model.visionenc import VisionEncoder
-
+from transformers import CLIPVisionModel, CLIPImageProcessor
 class Transformer(nn.Module):
 
     def __init__(self,config:Config)-> None:
@@ -60,7 +60,7 @@ class Transformer(nn.Module):
         pos_embd[:,1::2] = torch.cos(k*div_term)
         pos_embd = pos_embd.unsqueeze(0) # [1,T,embeddings]
         self.register_buffer('pos_embd',pos_embd)
-
+        self._init_weights()
     def forward(self,x,y,is_image = False):
         # X is targate sequence and y is source sequence
         Bx,Tx = x.size()
@@ -100,6 +100,32 @@ class Transformer(nn.Module):
 
         return x
 
+    def _init_weights(self):
+        for name, module in self.named_modules():
+            # Skip CLIPVisionModel or any frozen module
+            if isinstance(module, CLIPVisionModel) or not any(p.requires_grad for p in module.parameters()):
+                # print("skipping ")
+                continue
+
+            if isinstance(module, nn.Linear):
+                std = 0.02
+                if hasattr(module,'NANO_TRANS_E'):
+                    std *= (2*self.config.num_encoder_layers)** -0.5
+                if hasattr(module,'NANO_TRANS_D'):
+                    std *= (2*self.config.num_decoder_layers)** -0.5
+
+                torch.nn.init.normal_(module.weight,mean=0.0,std = std)
+
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0, std=0.02)
+
+            elif isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config = Config(
@@ -123,7 +149,7 @@ if __name__ == "__main__":
     img = torch.rand((4,3,256,256)).to(device)
     out = model(x,img,is_image = True)
 
-    print(out.shpae)
+    print(out.shape)
 
     # Calculate loss
     criterion = nn.CrossEntropyLoss()

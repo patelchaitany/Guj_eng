@@ -17,7 +17,7 @@ class DecAttention(nn.Module):
         self.config = config
         self.attention = nn.Linear(config.num_embeddings_decoder,config.num_embeddings_decoder*3)
         self.proj_c = nn.Linear(config.num_embeddings_decoder,config.num_embeddings_decoder)
-
+        self.proj_c.NANO_TRANS_D = 1.0
         self.nhead = config.nhead
         self.num_embeddings_decoder = config.num_embeddings_decoder
 
@@ -53,6 +53,7 @@ class CrossAttention(nn.Module):
 
         self.proj_c = nn.Linear(config.num_embeddings_decoder,config.num_embeddings_decoder)
 
+        self.proj_c.NANO_TRANS_D = 1.0
         self.nhead = config.nhead
     def forward(self,x,encoder_output):
 
@@ -82,12 +83,14 @@ class DecoderMLP(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(config.num_embeddings_decoder,config.dim_feedforward),
             nn.GELU(),
-            nn.Linear(config.dim_feedforward,config.num_embeddings_decoder)
         )
+        self.proj_c = nn.Linear(config.dim_feedforward,config.num_embeddings_decoder)
+        self.proj_c.NANO_TRANS_D = 1.0
 
     def forward(self,x):
-
-        return self.mlp(x)
+        y = self.mlp(x)
+        y = self.proj_c(y)
+        return y
 
 class DecoderBlock(nn.Module):
 

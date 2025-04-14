@@ -20,7 +20,7 @@ class EncAttention(nn.Module):
         assert config.num_embeddings_encoder % config.nhead == 0
         self.attention = nn.Linear(config.num_embeddings_encoder,config.num_embeddings_encoder*3)
         self.proj = nn.Linear(config.num_embeddings_encoder,config.num_embeddings_encoder)
-
+        self.proj.NANO_TRANS_E = 1.0
         self.nhead = config.nhead
         self.num_embeddings_encoder = config.num_embeddings_encoder
 
@@ -56,7 +56,7 @@ class encoderMLP(nn.Module):
         self.linear1 = nn.Linear(config.num_embeddings_encoder,config.dim_feedforward)
         self.linear2 = nn.Linear(config.dim_feedforward,config.num_embeddings_encoder)
         self.gelu = nn.GELU()
-
+        self.linear2.NANO_TRANS_E = 1.0
     def forward(self,x):
         # x : [batch_size,seq_len,embeddings]
         # output : [batch_size,seq_len,embeddings]
