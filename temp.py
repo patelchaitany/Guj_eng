@@ -2,7 +2,7 @@ import csv
 
 # Assuming the TSV file is in directory1 with your Python script
 tsv_file_path = "guj_Gujr.tsv"  # Replace with your actual TSV filename
-output_tsv_path = "temp.tsv"
+output_tsv_path = "refined.tsv"
 
 # Count total rows and get first three rows
 total_rows = 0

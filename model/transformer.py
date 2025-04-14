@@ -123,7 +123,7 @@ if __name__ == "__main__":
     img = torch.rand((4,3,256,256)).to(device)
     out = model(x,img,is_image = True)
 
-
+    print(out.shpae)
 
     # Calculate loss
     criterion = nn.CrossEntropyLoss()
@@ -145,5 +145,6 @@ if __name__ == "__main__":
     print(f"Loss text : {loss.item()}")
     # Optionally, we could update weights
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # with torch.autocast(de)
     # optimizer.step()
     # optimizer.zero_grad()

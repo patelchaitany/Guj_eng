@@ -15,8 +15,8 @@ tokenizer_path = os.path.abspath(tokenizer_path)
 
 from tokenizer.tokenizer import Tokenizer
 
-def collect_fn(batch):
-    images = [item['image'] for item in batch]
+def collect_fn_image(batch):
+    images = torch.stack([item['image'] for item in batch])
     input =  [item['src_text'] for item in batch]
     output = [item['tgt_text'] for item in batch]
     original = [item['original'] for item in batch]
@@ -68,8 +68,8 @@ class ImageDataset(Dataset):
 
         # print("text src ",new_item['scr'])
         # print("text_tgt ",new_item['tgt'])
-
-        if item['scr_lang'] == "eng_Latn":
+        # print("src lang ")
+        if new_item['scr_lang'] == "eng_Latn":
             data = self.getguj(new_item)
         else:
             data = self.english(new_item)
@@ -77,6 +77,9 @@ class ImageDataset(Dataset):
         return data
 
     def getguj(self,item):
+
+        # print("englisg 1 ",item['scr'])
+        # print("gujrati 1 ",item['tgt'])
         input_ids = self.tokenizer.encode(item['scr'])
         output_ids = self.tokenizer.encode(item['tgt'])
 
@@ -124,6 +127,8 @@ class ImageDataset(Dataset):
         # input : is gujarati
         # output : is english
 
+        # print("englisg ",item['scr'])
+        # print("gujrati ",item['tgt'])
         input_ids = self.tokenizer.encode(item['scr'])
         output_ids = self.tokenizer.encode(item['tgt'])
 
@@ -139,8 +144,6 @@ class ImageDataset(Dataset):
         src_text = [eng_token] + input_ids
         tgt_text = [guj_token] + output_ids
         original_text = [guj_token] + input_ids
-        print("token gn ",src_text)
-        print("tgt gu ",tgt_text)
         src_text = [bos_token] + src_text + [eos_token]
         tgt_text = [bos_token] + tgt_text + [eos_token]
         original_text = [bos_token] + original_text + [eos_token]
@@ -172,5 +175,6 @@ if __name__ == "__main__":
     dataset = ImageDataset(os.path.join(data_dir,"eng_guj_img"),tokenizer_path, os.path.join(data_dir,"images"))
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True,collate_fn = collect_fn)
     for data in data_loader:
+        # print(" "*50)
         print(data['input'])
         print(data['output'])

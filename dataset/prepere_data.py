@@ -17,8 +17,8 @@ from tokenizer.tokenizer import Tokenizer
 
 def prepare_data(csv_file,tokenizer_path):
     special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
-    tokenizer = Tokenizer(special_token)
-    tokenizer.load(tokenizer_path)
+    # tokenizer = Tokenizer(special_token)
+    # tokenizer.load(tokenizer_path)
     data = pd.read_csv(csv_file, sep="\t")
     # data = pd.read_csv(csv_file)
     process_data=[]
@@ -30,18 +30,18 @@ def prepare_data(csv_file,tokenizer_path):
             src = str(src)
         if tgt is not str:
             tgt = str(tgt)
-        tokenized_src = tokenizer.encode(src)
-        tokenized_tgt = tokenizer.encode(tgt)
+        # tokenized_src = tokenizer.encode(src)
+        # tokenized_tgt = tokenizer.encode(tgt)
         process_data.append({
             'src_lang': row['src_lang'],
             'tgt_lang': row['tgt_lang'],
-            'src': tokenized_src,
-            'tgt': tokenized_tgt
+            'src': src,
+            'tgt': tgt
         })
     df_process_data = pd.DataFrame(process_data)
     data_set = Dataset.from_pandas(df_process_data)
-    data_set.save_to_disk('eng_guj')
+    data_set.save_to_disk('text_data')
 if __name__ == "__main__":
-    prepare_data("guj_Gujr.tsv",tokenizer_path)
+    prepare_data("refined.tsv",tokenizer_path)
 
     # prepare_data("tep.csv",tokenizer_path)

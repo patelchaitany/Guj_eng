@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath("../"))
 current_dir = os.path.dirname(os.path.abspath(__file__))  # Path to model/train.py
-tokenizer_path = os.path.join(current_dir, "../datset/tokenizer.model")
+tokenizer_path = os.path.join(current_dir, "../data/tokenizer.model")
 tokenizer_path = os.path.abspath(tokenizer_path)
 
 # from dataset.dataset import TranslatorDataset,collate_fn
@@ -18,8 +18,8 @@ from model.transformer import Transformer
 from model.config import Config
 from tokenizer.tokenizer import Tokenizer
 
-from datset.dataset import TranslatorDataset, collate_fn
-
+from dataset.dataset import TranslatorDataset, collate_fn_text
+from dataset.dataset_image import ImageDataset,collect_fn_image
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -35,11 +35,16 @@ warmup_steps = 10000
 max_lr = 6e-4
 min_lr = 0.1*max_lr
 
+grad_accum_img = 4096//32
+
+img_batch = 32
+img_batch_val = 2
 print(f"Current directory: {current_dir} {tokenizer_path}")
 
-tokenizer_path = "datset/tokenizer.model"
+tokenizer_path = "data/tokenizer.model"
 
-dataset = TranslatorDataset("datset/eng_guj/", tokenizer_path)
+dataset = TranslatorDataset("data/text_data/", tokenizer_path)
+image_data = ImageDataset("data/eng_guj_img/",tokenizer_path,"data/images/")
 # Calculate split sizes
 total_size = len(dataset)
 val_size = int(total_size * 0.2)
@@ -47,14 +52,23 @@ train_size = total_size - val_size
 
 train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn, num_workers=10)
-val_loader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=False, collate_fn=collate_fn, num_workers=10)
+img_val = int(len(image_data)*0.2)
+img_train = len(image_data) - img_val
+
+img_train_data,img_val_data = torch.utils.data.random_split(image_data,[img_train,img_val])
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn_text, num_workers=4)
+val_loader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=False, collate_fn=collate_fn_text, num_workers=2)
+
+img_t_loader = DataLoader(img_train_data,batch_size =img_batch,shuffle = True,collate_fn = collect_fn_image,num_workers=8)
+img_v_loader = DataLoader(img_val_data,batch_size = img_batch_val,shuffle = False,collate_fn = collect_fn_image,num_workers = 2)
+
 
 print(f"Training dataset size: {len(train_dataset)}")
 print(f"Validation dataset size: {len(val_dataset)}")
 
 len_data = len(train_loader)
-max_step = (len(train_loader)*max_iter)
+max_step = 50000
 print(f"Total steps: {max_step}")
 def validate_with_text(model, source_texts, tokenizer, device, max_len=50):
     print("\nValidation with provided text:")
@@ -114,16 +128,26 @@ config = Config(
     vocab_size = vocab_size
 )
 
-run = wandb.init(project="transformer for en->guj run2",config=config)
+run = wandb.init(project="final_run",config=config)
 print(config)
 
 
 
 print(len(train_loader))
 checkpoint_dir = os.path.join(current_dir, "checkpoints")
+os.makedirs(checkpoint_dir, exist_ok=True)  # Create checkpoint directory if it doesn't exist
+
 model = Transformer(config).to(device)
 checkpoint_path = os.path.join(checkpoint_dir, f"transformer_epoch_{2999}.pt")
-checkpoint = torch.load(checkpoint_path,weights_only=False)
+
+# Check if checkpoint exists before loading
+if os.path.exists(checkpoint_path):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    print(f"Checkpoint found at {checkpoint_path}")
+else:
+    print(f"No checkpoint found at {checkpoint_path}, using initialized model")
+    # Initialize an empty checkpoint to avoid errors
+    checkpoint = {'model_state_dict': model.state_dict()}
 
 # Load model weights
 model.load_state_dict(checkpoint['model_state_dict'])
@@ -145,16 +169,19 @@ source_text = ["Hello, My name is jhon Doe and I am a data scientist."]
 
 step = 0
 
-for i in range(3000,max_step):
+for i in range(0,max_step):
 
     import time
     running_loss = 0.0
     t_loader = tqdm(train_loader, desc=f"Epoch {i}", leave=True, total=grad_accum)
-
+    img_loader = tqdm(img_t_loader,desc = f"image Epocg {i}",leave = True,total = grad_accum_img)
     lr = get_lr(i)
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+
+    # i need to change this validation function to image validation
 
     if (i+1)%3000 == 0 or i == max_step-1:
         test_loader = tqdm(val_loader, desc=f"Validation", leave=True)
@@ -198,6 +225,32 @@ for i in range(3000,max_step):
         run.log({"loss":loss.item(),"avg_loss":running_loss/(idx+1),"lr":lr})
 
 
+    for idx,item in enumerate(img_loader):
+        if idx >= grad_accum_img:
+           img_loader.close()
+           break
+
+        start_time = time.time()
+        image = item['image'].to(device)
+        output = item['output'].to(device)
+
+        with torch.autocast(device_type="cuda",dtype=torch.bfloat16):
+            pred = model(output,image,is_image = True)
+            pred = pred[:,:-1,:].contiguous()
+            loss = criterion(pred.view(-1,pred.size(-1)),output[:,1:].contiguous().view(-1))
+
+        loss.backward()
+
+        batch_time = time.time() - start_time
+        running_loss += loss.item()
+
+        img_loader.set_postfix(
+            loss = loss.item(),
+            avg_loss =running_loss/(idx+1),
+            batch_time = f"{batch_time:.4f}s"
+        )
+
+        run.log({"loss_img":loss.item(),"avg_loss":running_loss/(idx+1),"lr":lr})
     optimizer.step()
 
 
