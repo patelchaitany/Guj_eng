@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath("../"))
 current_dir = os.path.dirname(os.path.abspath(__file__))  # Path to model/train.py
 tokenizer_path = os.path.join(current_dir, "../data/tokenizer.model")
 tokenizer_path = os.path.abspath(tokenizer_path)
-
+import torchvision.transforms as transforms
 from tokenizer.tokenizer import Tokenizer
 
 def collect_fn_image(batch):
@@ -32,6 +32,30 @@ def collect_fn_image(batch):
     }
     return data
 
+
+def ocr_collate_fn(batch):
+    images = torch.stack([item['image'] for item in batch])
+    texts = [item['text'] for item in batch]
+
+    input = pad_sequence(texts, batch_first=True, padding_value=3)
+    return {
+        'images': images,
+        'input': input
+    }
+
+def translation_collate_fn(batch):
+    images = torch.stack([item['image'] for item in batch])
+    source_texts = [item['text'] for item in batch]
+    target_texts = [item['text_gujarati'] for item in batch]
+
+    input = pad_sequence(source_texts, batch_first=True, padding_value=3)
+    output = pad_sequence(target_texts, batch_first=True, padding_value=3)
+    return {
+        'images': images,
+        'input': input,
+        'output': output
+    }
+
 class ImageDataset(Dataset):
 
     def __init__(self,path,tokenizer_path,image_folder):
@@ -41,6 +65,10 @@ class ImageDataset(Dataset):
         self.tokenizer = Tokenizer(self.special_token)
         self.tokenizer.load(tokenizer_path)
         self.image_folder = image_folder
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
     def __len__(self):
         return len(self.data)
 
@@ -166,6 +194,80 @@ class ImageDataset(Dataset):
         }
 
         return data
+
+class OCRDataset(Dataset):
+    def __init__(self, dataset_path,tokenizer_path):
+        self.dataset = load_from_disk(dataset_path)
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        self.special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
+        self.tokenizer = Tokenizer(self.special_token)
+        self.tokenizer.load(tokenizer_path)
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+
+        # Convert PIL image to tensor and normalize
+        image = item['image']
+        if not isinstance(image, Image.Image):
+            image = Image.fromarray(image)
+
+        bos = self.tokenizer.get_token_id("bos")
+        eos = self.tokenizer.get_token_id("eos")
+        en = self.tokenizer.get_token_id("<en>")
+        image_tensor = self.transform(image)
+        text = item['text']
+        text_tensor = self.tokenizer.encode(text)
+        text_tensor = [bos] +[en] +text_tensor + [eos]
+        text_tensor = torch.tensor(text_tensor)
+
+        return {
+            'image': image_tensor,
+            'text': text_tensor
+        }
+
+class TranslationDataset(Dataset):
+    def __init__(self, dataset_path, tokenizer_path):
+        self.dataset = load_from_disk(dataset_path)
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        self.special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
+        self.tokenizer = Tokenizer(self.special_token)
+        self.tokenizer.load(tokenizer_path)
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+
+        # Convert PIL image to tensor and normalize
+        image = item['image']
+        if not isinstance(image, Image.Image):
+            image = Image.fromarray(image)
+
+        image_tensor = self.transform(image)
+
+        bos = self.tokenizer.get_token_id("bos")
+        eos = self.tokenizer.get_token_id("eos")
+        gu = self.tokenizer.get_token_id("<en|gu>")
+        text_tensor = self.tokenizer.encode(item['text'])
+        text_tensor = [bos] + [gu] +text_tensor + [eos]
+        text_tensor = torch.tensor(text_tensor)
+
+        return {
+            'image': image_tensor,
+            'text': item['text'],
+            'text_gujarati': item['text_gujarati']
+        }
+
 
 if __name__ == "__main__":
 
