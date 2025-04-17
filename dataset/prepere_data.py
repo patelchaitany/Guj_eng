@@ -13,7 +13,6 @@ tokenizer_path = os.path.join(current_dir, "../dataset/tokenizer.model")
 tokenizer_path = os.path.abspath(tokenizer_path)
 
 from tokenizer.tokenizer import Tokenizer
-# prepering the data as numpy shard file with pretokenization with all the token added
 
 def prepare_data(csv_file,tokenizer_path):
     special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
