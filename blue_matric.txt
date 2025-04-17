@@ -1,0 +1,5 @@
+Final n-gram BLEU Scores:
+BLEU-1 (unigram):     0.4123
+BLEU-2 (bi-gram):     0.2751
+BLEU-3 (tri-gram):    0.1840
+BLEU-4 (4-gram):      0.1072
