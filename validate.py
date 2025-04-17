@@ -8,8 +8,6 @@ from model.config import Config
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from tqdm import tqdm
 from tokenizer.tokenizer import Tokenizer
-from deep_translator import GoogleTranslator
-translator = GoogleTranslator(source='en', target='gu')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
@@ -36,12 +34,11 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-# === Inference function ===
 def predict_image(model, image_tensor, tokenizer, max_len=32):
     model.eval()
     with torch.no_grad():
         image_tensor = image_tensor.unsqueeze(0).to(device)
-        x = torch.tensor([[tokenizer.get_token_id("bos"),tokenizer.get_token_id("<en>")]], device=device)
+        x = torch.tensor([[tokenizer.get_token_id("bos"),tokenizer.get_token_id("<gu>")]], device=device)
 
         for _ in range(max_len):
             output = model(x, image_tensor, is_image=True)
@@ -62,7 +59,7 @@ bleu4_scores = []
 
 smoothie = SmoothingFunction().method4
 
-for i, item in enumerate(tqdm(test_dataset, desc="🔍 Evaluating BLEU")):
+for i, item in enumerate(tqdm(test_dataset, desc="Evaluating BLEU")):
     image = item["image"]
     reference = item["text_gujarati"]
 
