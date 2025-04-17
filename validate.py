@@ -1,176 +1,117 @@
-import sys
-import os
-
-sys.path.append(os.path.abspath("../"))
-current_dir = os.path.dirname(os.path.abspath(__file__))  # Path to model/train.py
-
-from model.decoder import *
-from model.encode import *
 import torch
-from torch import nn
+import os
+from datasets import load_from_disk
 from torch.nn import functional as F
-import math as maths
+from torchvision import transforms
+from model.transformer import Transformer
 from model.config import Config
-from model.visionenc import VisionEncoder
-from transformers import CLIPVisionModel, CLIPImageProcessor
-class Transformer(nn.Module):
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from tqdm import tqdm
+from tokenizer.tokenizer import Tokenizer
+from deep_translator import GoogleTranslator
+translator = GoogleTranslator(source='en', target='gu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def __init__(self,config:Config)-> None:
+special_token = ["<en|gu>", "<gu|en>","<en>", "<gu>"]
+tokenizer_path = "data/tokenizer.model"
+tokenizer = Tokenizer(special_token)
+tokenizer.load(tokenizer_path)
 
-        super(Transformer,self).__init__()
+vocab_size = tokenizer.get_vocab_size()
+config = Config(
+    vocab_size = vocab_size
+)
 
-        self.config = config
+model = Transformer(config).to(device)
 
-        # VisionEncoder
-        self.visenc = VisionEncoder(config)
+model.load_state_dict(torch.load("checkpoints/transformer_epoch_2649.pt", map_location=device)['model_state_dict'])
+model.eval()
+print("Model and weights loaded.")
+
+dataset_path = "test_ting_data"
+test_dataset = load_from_disk(dataset_path)
+print(f"Loaded {len(test_dataset)} samples from test dataset.")
+
+preprocess = transforms.Compose([
+    transforms.ToTensor(),
+])
+
+# === Inference function ===
+def predict_image(model, image_tensor, tokenizer, max_len=32):
+    model.eval()
+    with torch.no_grad():
+        image_tensor = image_tensor.unsqueeze(0).to(device)
+        x = torch.tensor([[tokenizer.get_token_id("bos"),tokenizer.get_token_id("<en>")]], device=device)
+
+        for _ in range(max_len):
+            output = model(x, image_tensor, is_image=True)
+            next_token_logits = output[:, -1, :]
+            next_token = next_token_logits.argmax(dim=-1, keepdim=True)
+
+            if next_token.item() == tokenizer.get_token_id("eos"):
+                break
+            x = torch.cat([x, next_token], dim=1)
+
+        tokens = x.squeeze().tolist()
+        return tokenizer.decode(tokens)
+
+bleu1_scores = []
+bleu2_scores = []
+bleu3_scores = []
+bleu4_scores = []
+
+smoothie = SmoothingFunction().method4
+
+for i, item in enumerate(tqdm(test_dataset, desc="🔍 Evaluating BLEU")):
+    image = item["image"]
+    reference = item["text_gujarati"]
+
+    image_tensor = preprocess(image)
+    predicted_text = predict_image(model, image_tensor, tokenizer)
+
+    ref_tokens = reference.split()
+    pred_tokens = predicted_text.split()
+
+    bleu1 = sentence_bleu([ref_tokens], pred_tokens, weights=(1, 0, 0, 0), smoothing_function=smoothie)
+    bleu2 = sentence_bleu([ref_tokens], pred_tokens, weights=(0.5, 0.5, 0, 0), smoothing_function=smoothie)
+    bleu3 = sentence_bleu([ref_tokens], pred_tokens, weights=(0.33, 0.33, 0.33, 0), smoothing_function=smoothie)
+    bleu4 = sentence_bleu([ref_tokens], pred_tokens, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=smoothie)
+
+    bleu1_scores.append(bleu1)
+    bleu2_scores.append(bleu2)
+    bleu3_scores.append(bleu3)
+    bleu4_scores.append(bleu4)
+
+    if i % 100 == 0:
+        print(f"\nSample {i}:")
+        print(f"Reference: {reference}")
+        print(f"Predicted: {predicted_text}")
+        print(f"BLEU-1: {bleu1:.4f}, BLEU-2: {bleu2:.4f}, BLEU-3: {bleu3:.4f}, BLEU-4: {bleu4:.4f}")
+
+print("\n Final BLEU Scores:")
+print(f"BLEU-1: {sum(bleu1_scores)/len(bleu1_scores):.4f}")
+print(f"BLEU-2: {sum(bleu2_scores)/len(bleu2_scores):.4f}")
+print(f"BLEU-3: {sum(bleu3_scores)/len(bleu3_scores):.4f}")
+print(f"BLEU-4: {sum(bleu4_scores)/len(bleu4_scores):.4f}")
 
 
-        # decoder
+from PIL import Image
+import uuid
 
-        self.wte = nn.Embedding(config.vocab_size,self.config.comman_embedding_dim)
-        self.decoder = nn.ModuleDict(dict(
-            ln_f0 = nn.LayerNorm(self.config.comman_embedding_dim),
-            proj_cm = nn.Linear(self.config.comman_embedding_dim,self.config.num_embeddings_decoder),
-            h = nn.ModuleList([DecoderBlock(self.config) if i % 2 == 0 else Decoder_Cross(self.config) for i in range(config.num_decoder_layers * 2)]),
-            ln_f = nn.LayerNorm(config.num_embeddings_decoder),
-            final_proj = nn.Linear(self.config.num_embeddings_decoder,self.config.comman_embedding_dim),
-            ln_f2 = nn.LayerNorm(self.config.comman_embedding_dim)
-        ))
-        self.lm_head = nn.Linear(config.comman_embedding_dim,config.vocab_size,bias=False)
+output_folder = "generated_samples"
+os.makedirs(output_folder, exist_ok=True)
 
-        # encoder
-        self.encoder = nn.ModuleDict(
-            dict(
-            ln_f0 = nn.LayerNorm(self.config.comman_embedding_dim),
-            proj_cm = nn.Linear(self.config.comman_embedding_dim,self.config.num_embeddings_encoder),
-            h = nn.ModuleList([EncoderBlock(self.config) for _ in range(self.config.num_encoder_layers)]),
-            ln_f = nn.LayerNorm(config.num_embeddings_encoder)
-        ))
+num_samples_to_save = 10
+print("\nSaving sample predictions:\n")
 
-        self.proj_c = nn.Linear(config.num_embeddings_encoder,config.num_embeddings_decoder)
+for idx, item in enumerate(test_dataset.select(range(num_samples_to_save))):
+    image = item["image"]
+    image_tensor = preprocess(image)
+    predicted_text = predict_image(model, image_tensor, tokenizer)
 
-        self.wte.weight = self.lm_head.weight
+    img_name = f"sample_{idx}_{uuid.uuid4().hex[:6]}.png"
+    img_path = os.path.join(output_folder, img_name)
 
+    image.save(img_path)
 
-        # positional embeddings
-        div_term = torch.exp(torch.arange(0,self.config.comman_embedding_dim,2)*(-1*maths.log(10000.0)/self.config.comman_embedding_dim)) # [embeddings//2]
-        k = torch.arange(self.config.max_len).unsqueeze(1) # [T,1]
-        pos_embd = torch.zeros(self.config.max_len,self.config.comman_embedding_dim) # [T,embeddings]
-        pos_embd[:,0::2] = torch.sin(k*div_term) # -> k*div_term : [T,1] * [embeddings//2] = [T,1] * [T,embeddings//2] = [T,embeddings//2]
-        pos_embd[:,1::2] = torch.cos(k*div_term)
-        pos_embd = pos_embd.unsqueeze(0) # [1,T,embeddings]
-        self.register_buffer('pos_embd',pos_embd)
-        self._init_weights()
-    def forward(self,x,y,is_image = False):
-        # X is targate sequence and y is source sequence
-        Bx,Tx = x.size()
-        if not is_image:
-            By,Ty = y.size()
-            # encoder
-            y = self.wte(y) # [B,T] -> [B,T,comman_embeddings]
-
-            y = y + self.pos_embd[:,:Ty].requires_grad_(False) # [B,T,comman_embeddings]
-            y = self.encoder.ln_f0(y) # [B,T,comman_embeddings]
-            y = self.encoder.proj_cm(y) # [B,T,comman_embeddings] -> [B,T,encoder_embeddings]
-            for block in self.encoder.h:
-                y = block(y) # [B,T,encoder_embeddings]
-
-            y = self.encoder.ln_f(y) # [B,T,embeddings]
-            y = self.proj_c(y) # [B,T,encoder_embeddings] -> [B,T,decoder_embeddings]
-
-        if is_image:
-            By,Cy,Hy,Wx = y.size()
-            y = self.visenc(y) # [B,T,Image_encoding]
-        # decoder
-
-        x = self.wte(x) # [B,T] -> [B,T,comman_embeddings]
-        x = x + self.pos_embd[:,:Tx].requires_grad_(False) # [B,T,comman_embeddings]
-        x = self.decoder.ln_f0(x) # [B,T,comman_embeddings]
-        x = self.decoder.proj_cm(x) # [B,T,comman_embeddings] -> [B,T,decoder_embeddings]
-        for block in self.decoder.h:
-            if isinstance(block,Decoder_Cross):
-                x = block(x,y) # [B,T,decoder_embeddings]
-            else:
-                x = block(x) # [B,T,decoder_embeddings]
-
-        x = self.decoder.ln_f(x) # [B,T,decoder_embeddings]
-        x = self.decoder.final_proj(x) # [B,T,decoder_embeddings] -> [B,T,comman_embeddings]
-        x = self.decoder.ln_f2(x) # [B,T,comman_embeddings]
-        x = self.lm_head(x) # [B,T,comman_embeddings] -> [B,T,vocab_size]
-
-        return x
-
-    def _init_weights(self):
-        for name, module in self.named_modules():
-            # Skip CLIPVisionModel or any frozen module
-            if isinstance(module, CLIPVisionModel) or not any(p.requires_grad for p in module.parameters()):
-                # print("skipping ")
-                continue
-
-            if isinstance(module, nn.Linear):
-                std = 0.02
-                if hasattr(module,'NANO_TRANS_E'):
-                    std *= (2*self.config.num_encoder_layers)** -0.5
-                if hasattr(module,'NANO_TRANS_D'):
-                    std *= (2*self.config.num_decoder_layers)** -0.5
-
-                torch.nn.init.normal_(module.weight,mean=0.0,std = std)
-
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Embedding):
-                nn.init.normal_(module.weight, mean=0, std=0.02)
-
-            elif isinstance(module, nn.Conv2d):
-                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
-if __name__ == "__main__":
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    config = Config(
-        d_model = 64,
-        nhead = 4,
-        num_encoder_layers = 20,
-        num_decoder_layers = 10,
-        dim_feedforward = 128,
-        dropout = 0.1,
-        vocab_size = 100,
-        max_len = 32,
-        num_embeddings_decoder = 64,
-        num_embeddings_encoder = 64,
-        comman_embedding_dim = 20,
-    )
-    # for the testing perpouse of text
-
-    model = Transformer(config).to(device)
-    x = torch.randint(0,100,(4,32)).to(device)
-    y = torch.randint(0,100,(4,32)).to(device)
-    img = torch.rand((4,3,256,256)).to(device)
-    out = model(x,img,is_image = True)
-
-    print(out.shape)
-
-    # Calculate loss
-    criterion = nn.CrossEntropyLoss()
-    labels = torch.randint(0, 100, (4, 32)).to(device)  # Create random labels for demonstration
-    loss = criterion(out.view(-1, config.vocab_size), labels.view(-1))
-
-    # Perform backward pass
-    loss.backward()
-
-    # Print loss value
-    print(f"Loss: {loss.item()}")
-
-    # for text only
-
-    out = model(x,y)
-    loss = criterion(out.view(-1,config.vocab_size),labels.view(-1))
-    loss.backward()
-
-    print(f"Loss text : {loss.item()}")
-    # Optionally, we could update weights
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    # with torch.autocast(de)
-    # optimizer.step()
-    # optimizer.zero_grad()
+    print(f"{img_name} -> {predicted_text}")
