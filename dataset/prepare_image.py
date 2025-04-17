@@ -13,15 +13,13 @@ import cv2
 from multiprocessing import Pool, cpu_count
 import argparse
 
-# Setup paths
 sys.path.append(os.path.abspath("../"))
 current_dir = os.path.dirname(os.path.abspath(__file__))
 tokenizer_path = os.path.join(current_dir, "../data/tokenizer.model")
 tokenizer_path = os.path.abspath(tokenizer_path)
 
-from tokenizer.tokenizer import Tokenizer  # Only used if needed
+from tokenizer.tokenizer import Tokenizer  
 
-# Image preparation function
 def prepare_image(image_path, text, path, leng):
     img = Image.open(image_path).convert('RGB')
     width, height = img.size
@@ -85,7 +83,6 @@ def prepare_image(image_path, text, path, leng):
     img_cropped.save(save_path)
     return image_name
 
-# Helper for multiprocessing
 def process_row(args):
     row, image_list, image_directory = args
     random_image = random.choice(image_list)
@@ -117,7 +114,6 @@ def process_row(args):
         'tgt_image': tgt_image,
     }
 
-# Main function to prepare data
 def prpare_data(csv_file, image_list, image_directory, data_dir, num_rows=None, num_workers=None):
     data = pd.read_csv(csv_file, sep="\t")
 
@@ -136,7 +132,6 @@ def prpare_data(csv_file, image_list, image_directory, data_dir, num_rows=None, 
     out_path = os.path.join(data_dir, "eng_guj_img")
     data_set.save_to_disk(out_path)
 
-# CLI interface
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_rows", type=int, default=None, help="Number of rows to process")
